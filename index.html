@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Скриблс — журнал</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #05060a; overflow: hidden;
+    font-family: monospace; user-select: none;
+  }
+  #stage { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+
+  #figure {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 300px; height: 340px;
+    pointer-events: none;
+    filter: drop-shadow(0 0 40px rgba(110,150,255,0.25));
+    animation: bob 3.5s ease-in-out infinite;
+    transition: filter 0.4s;
+  }
+  @keyframes bob {
+    0%,100% { transform: translate(-50%,-50%) translateY(0); }
+    50%     { transform: translate(-50%,-50%) translateY(-10px); }
+  }
+  #figure img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+  .paper {
+    position: absolute; width: 46px; height: 60px;
+    background: #e8e6df; border: 1px solid rgba(0,0,0,0.4);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-size: 22px; color: #222; font-weight: bold;
+    transition: transform 0.08s;
+  }
+  .paper:hover { transform: scale(1.1); }
+  .paper.hit {
+    transform: scale(1.6) rotate(20deg); opacity: 0;
+    transition: all 0.25s ease-out; pointer-events: none;
+  }
+  .paper.gold { background: #ffd76a; border-color: #b98a1f; box-shadow: 0 0 18px rgba(255,215,106,0.7); }
+  .paper.bomb { background: #2a0b0b; color: #ff5c5c; border-color: #ff5c5c; box-shadow: 0 0 18px rgba(255,92,92,0.6); }
+
+  @keyframes driftIn {
+    0%   { opacity: 0; transform: translateY(30px) scale(0.8); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  #hud {
+    position: absolute; top: 20px; left: 24px;
+    color: #e8e6df; font-size: 18px; letter-spacing: 2px;
+    text-shadow: 0 0 8px rgba(110,150,255,0.4); line-height: 1.6;
+  }
+  #hud span { color: #7aa2ff; }
+  #hud .lvl { color: #ffd76a; }
+  #hud .time { color: #6be08a; }
+
+  #hint {
+    position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+    color: rgba(232,230,223,0.4); font-size: 13px; letter-spacing: 1px; text-align: center;
+  }
+  #hint b { color: #ffd76a; }
+  #hint i { color: #ff5c5c; font-style: normal; }
+
+  #banner {
+    position: absolute; top: 40%; left: 50%;
+    transform: translate(-50%,-50%) scale(0.8);
+    color: #fff; font-size: 42px; letter-spacing: 6px;
+    opacity: 0; pointer-events: none;
+    text-shadow: 0 0 20px rgba(255,215,106,0.8);
+    transition: all 0.4s ease-out; z-index: 5;
+  }
+  #banner.show { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+
+  /* журнал */
+  #journalBtn {
+    position: absolute; top: 20px; right: 24px;
+    background: transparent; color: #e8e6df;
+    border: 1px solid rgba(232,230,223,0.3);
+    padding: 8px 14px; font-family: monospace;
+    font-size: 14px; letter-spacing: 2px; cursor: pointer;
+    transition: all 0.2s;
+  }
+  #journalBtn:hover { background: rgba(232,230,223,0.1); }
+
+  #journal {
+    position: absolute; top: 0; right: -420px;
+    width: 400px; height: 100vh;
+    background: rgba(8,9,14,0.96);
+    border-left: 1px solid rgba(232,230,223,0.15);
+    color: #e8e6df; padding: 30px 26px;
+    box-sizing: border-box; overflow-y: auto;
+    transition: right 0.4s ease-out; z-index: 20;
+    font-size: 14px; line-height: 1.7;
+  }
+  #journal.open { right: 0; }
+  #journal h2 {
+    font-size: 18px; letter-spacing: 4px;
+    margin: 0 0 20px; color: #7aa2ff;
+    border-bottom: 1px solid rgba(122,162,255,0.3);
+    padding-bottom: 10px;
+  }
+  #journal .entry {
+    margin-bottom: 22px; padding-bottom: 16px;
+    border-bottom: 1px dashed rgba(232,230,223,0.15);
+  }
+  #journal .entry.locked { opacity: 0.35; }
+  #journal .entry h3 {
+    margin: 0 0 8px; font-size: 15px;
+    color: #ffd76a; letter-spacing: 2px;
+  }
+  #journal .entry p { margin: 0; color: rgba(232,230,223,0.85); }
+  #journal .entry .lock {
+    font-size: 12px; color: rgba(232,230,223,0.4);
+    letter-spacing: 1px; margin-top: 6px;
+  }
+
+  #closeJ {
+    position: absolute; top: 20px; right: 20px;
+    background: transparent; border: none; color: #e8e6df;
+    font-size: 20px; cursor: pointer; font-family: monospace;
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <div id="figure">
+    <img id="figureImg" src="figure.png" alt="Скриблс">
+  </div>
+
+  <div id="hud">
+    СЧЁТ: <span id="pts">0</span><br>
+    УРОВЕНЬ: <span class="lvl" id="lvl">1</span><br>
+    ВРЕМЯ: <span class="time">∞</span>
+  </div>
+
+  <div id="hint">
+    лови бумаги · <b>золотые = +3</b> · <i>красные = −2</i> · уровень каждые 10 очков
+  </div>
+
+  <div id="banner"></div>
+
+  <button id="journalBtn">ЖУРНАЛ</button>
+
+  <div id="journal">
+    <button id="closeJ">✕</button>
+    <h2>ЖУРНАЛ</h2>
+    <div id="entries"></div>
+  </div>
+
+</div>
+
+<script>
+  const stage     = document.getElementById('stage');
+  const ptsEl     = document.getElementById('pts');
+  const lvlEl     = document.getElementById('lvl');
+  const bannerEl  = document.getElementById('banner');
+  const figureImg = document.getElementById('figureImg');
+  const journal   = document.getElementById('journal');
+  const entriesEl = document.getElementById('entries');
+
+  const figures = ['figure.png', 'figure2.png', 'figure3.png', 'figure4.png', 'figure5.png'];
+
+  const glows = [
+    'rgba(110,150,255,0.25)',
+    'rgba(255,120,200,0.30)',
+    'rgba(255,180,80,0.35)',
+    'rgba(120,255,160,0.35)',
+    'rgba(255,80,80,0.45)'
+  ];
+
+  // записи журнала
+  const journalEntries = [
+    {
+      title: 'СКРИБЛС I — приятно',
+      text: 'Секс с ней ощущался как холодный ток по коже. Бумаги вокруг дрожали, свет мигал в такт. Она не торопилась — вела медленно, будто читала тебя по строчкам. Внутри гладко и прохладно, как вода в тёмной комнате.'
+    },
+    {
+      title: 'СКРИБЛС II — мягко',
+      text: 'Секс с ней ощущался как шёпот в ухо. Мягко, тепло, с паузами. Она наклонялась близко, дышала в шею, и бумаги падали одна за другой, будто отсчитывали такт. Тело — податливое, почти невесомое.'
+    },
+    {
+      title: 'СКРИБЛС III — Большая',
+      text: 'Секс с ней ощущался как удар. Резко, горячо, до дрожи в коленях. Она не давала передышки — темп рос,невозможно было остановиться.У неё крайне большая жопа'
+    },
+    {
+      title: 'СКРИБЛС IV — Кто я?',
+      text: 'Секс с ней ощущался очень приятно. её латексная кожа обхватила мой член. очень приятно было конечно. да и очень дерзко сама всё делала. я тратил своё семя до потери пульса. ГЛАВНАЯ проблема (подмечаю) я превратился в существо Скрип.'
+    },
+    {
+      title: 'СКРИБЛС V — Я ЧЕРТ!?',
+      text: 'Секс с ней ощущался очень жёстко. я пылал, она заигрывала со мной. чтож, я пытался отнести её в мир? мягкая кожа облипла ко мне, у неё вырабатывалась смазка от которой я скользил. странные силы делали секс приятнее. но я стал чёртом (в прямом смысле).'
+    }
+  ];
+
+  let score = 0;
+  let level = 0;
+  let playing = true;
+  let spawnTimer = null;
+  const maxPapers = 7; // сколько бумаг висит одновременно
+
+  const glyphs = ['~','?','!','×','7','Ø','V','^'];
+  const activePapers = [];
+
+  function updateHud() {
+    ptsEl.textContent = score;
+    lvlEl.textContent = level + 1;
+  }
+
+  function showBanner(text) {
+    bannerEl.textContent = text;
+    bannerEl.classList.add('show');
+    setTimeout(() => bannerEl.classList.remove('show'), 1200);
+  }
+
+  function renderJournal() {
+    entriesEl.innerHTML = '';
+    journalEntries.forEach((e, i) => {
+      const locked = i > level;
+      const div = document.createElement('div');
+      div.className = 'entry' + (locked ? ' locked' : '');
+      div.innerHTML = `
+        <h3>${locked ? '??? — ЗАБЛОКИРОВАНО' : e.title}</h3>
+        <p>${locked ? '' : e.text}</p>
+        ${locked ? '<div class="lock">открой уровень ' + (i + 1) + '</div>' : ''}
+      `;
+      entriesEl.appendChild(div);
+    });
+  }
+
+  function applyLevel() {
+    figureImg.src = figures[Math.min(level, figures.length - 1)];
+    figureImg.parentElement.style.filter =
+      `drop-shadow(0 0 40px ${glows[Math.min(level, glows.length - 1)]})`;
+    showBanner('УРОВЕНЬ ' + (level + 1));
+    renderJournal();
+  }
+
+  function spawnPaper() {
+    if (!playing) return;
+    if (activePapers.length >= maxPapers) return;
+
+    const p = document.createElement('div');
+    p.className = 'paper';
+
+    const bombChance = level >= 1 ? 0.15 + level * 0.05 : 0;
+    const goldChance = 0.10;
+    const r = Math.random();
+
+    let type = 'normal';
+    if (r < bombChance) type = 'bomb';
+    else if (r < bombChance + goldChance) type = 'gold';
+
+    if (type === 'gold') { p.classList.add('gold'); p.textContent = '★'; }
+    else if (type === 'bomb') { p.classList.add('bomb'); p.textContent = '✖'; }
+    else { p.textContent = glyphs[Math.floor(Math.random()*glyphs.length)]; }
+
+    // место появления — по краям, не поверх фигуры
+    const side = Math.random();
+    let x, y;
+    if (side < 0.25)      { x = 40 + Math.random() * (window.innerWidth * 0.25); y = 60 + Math.random() * (window.innerHeight - 160); }
+    else if (side < 0.5)  { x = window.innerWidth * 0.7 + Math.random() * (window.innerWidth * 0.25 - 60); y = 60 + Math.random() * (window.innerHeight - 160); }
+    else if (side < 0.75) { x = 40 + Math.random() * (window.innerWidth - 100); y = 40 + Math.random() * (window.innerHeight * 0.2); }
+    else                  { x = 40 + Math.random() * (window.innerWidth - 100); y = window.innerHeight * 0.75 + Math.random() * (window.innerHeight * 0.2 - 80); }
+
+    p.style.left = x + 'px';
+    p.style.top  = y + 'px';
+    p.style.animation = 'driftIn 0.4s ease-out';
+
+    p.addEventListener('click', () => {
+      if (p.classList.contains('hit')) return;
+      if (type === 'gold') score += 3;
+      else if (type === 'bomb') score = Math.max(0, score - 2);
+      else score += 1;
+
+      p.classList.add('hit');
+      setTimeout(() => {
+        p.remove();
+        const idx = activePapers.indexOf(p);
+        if (idx >= 0) activePapers.splice(idx, 1);
+      }, 300);
+
+      updateHud();
+      checkLevel();
+    });
+
+    stage.appendChild(p);
+    activePapers.push(p);
+
+    // если долго не кликают — она остаётся, но слегка покачивается
+    p.animate(
+      [
+        { transform: 'translateY(0) rotate(0deg)' },
+        { transform: 'translateY(-8px) rotate(3deg)' },
+        { transform: 'translateY(0) rotate(0deg)' }
+      ],
+      { duration: 3000 + Math.random() * 2000, iterations: Infinity }
+    );
+  }
+
+  function checkLevel() {
+    const next = level + 1;
+    if (next < figures.length && score >= next * 10) {
+      level = next;
+      applyLevel();
+      updateHud();
+    }
+  }
+
+  // спавн — раз в 1.2 сек, пока есть место
+  spawnTimer = setInterval(spawnPaper, 1);
+
+  document.getElementById('journalBtn').addEventListener('click', () => {
+    journal.classList.add('open');
+    renderJournal();
+  });
+  document.getElementById('closeJ').addEventListener('click', () => {
+    journal.classList.remove('open');
+  });
+
+  applyLevel();
+  updateHud();
+  for (let i = 0; i < 4; i++) spawnPaper();
+</script>
+
+</body>
+</html>
